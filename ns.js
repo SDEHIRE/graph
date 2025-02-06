@@ -1,9 +1,8 @@
 const express = require("express");
 const { MongoClient } = require("mongodb");
-const cors = require('cors');
-const app = express();
+const cors = require("cors");
 
-// Enable CORS for all routes
+const app = express();
 app.use(cors());
 
 const uri = "mongodb+srv://sdehire:1111@cluster0.pft5g.mongodb.net/sdehire?retryWrites=true&w=majority";
@@ -34,8 +33,7 @@ app.get("/api/student-progress", async (req, res) => {
 
     // Loop through sessions and categorize by date
     userSessions.forEach((session) => {
-      // Format the date to "YYYY-MM-DD"
-      const sessionDate = new Date(session.createdAt).toISOString().split('T')[0];
+      const sessionDate = new Date(session.createdAt).toISOString().split("T")[0];
 
       if (!dailyProgress[sessionDate]) {
         dailyProgress[sessionDate] = {
@@ -44,28 +42,29 @@ app.get("/api/student-progress", async (req, res) => {
         };
       }
 
-      // Increment problems attempted and passed test cases for the date
-      dailyProgress[sessionDate].problemsAttempted += 1; // Every session counts as an attempted problem
-      dailyProgress[sessionDate].passedTestCases += session.evaluationResults[0]?.totalPassed || 0; // Count the passed test cases
+      // Increment problems attempted
+      dailyProgress[sessionDate].problemsAttempted += 1;
+
+      // Properly sum up passed test cases
+      dailyProgress[sessionDate].passedTestCases += session.evaluationResults
+        ? session.evaluationResults.reduce((sum, test) => sum + (test.passed ? 1 : 0), 0)
+        : 0;
     });
 
     // Prepare the data to send in the response
-    const progressData = Object.keys(dailyProgress).map(date => ({
+    const progressData = Object.keys(dailyProgress).map((date) => ({
       date,
       problemsAttempted: dailyProgress[date].problemsAttempted,
       passedTestCases: dailyProgress[date].passedTestCases,
     }));
 
-    // Predict the salary based on problems attempted and passed test cases
-    let totalProblemsAttempted = 0;
-    let totalPassedTestCases = 0;
-    progressData.forEach(day => {
-      totalProblemsAttempted += day.problemsAttempted;
-      totalPassedTestCases += day.passedTestCases;
-    });
+    // Predict salary based on total problems attempted and passed test cases
+    let totalProblemsAttempted = progressData.reduce((sum, day) => sum + day.problemsAttempted, 0);
+    let totalPassedTestCases = progressData.reduce((sum, day) => sum + day.passedTestCases, 0);
 
     let predictedSalary = 120000; // Base salary of 1.2 LPA
     const targetProblems = 650;
+    
     if (totalProblemsAttempted >= 15) {
       predictedSalary = Math.min(
         4500000, // Maximum salary of 45 LPA
@@ -73,13 +72,13 @@ app.get("/api/student-progress", async (req, res) => {
       );
     }
 
-    // Return data for graph plotting and salary prediction
+    // Return the final response
     return res.status(200).json({
       username: userSessions[0].username,
       totalProblemsAttempted,
       totalPassedTestCases,
       predictedSalary,
-      progressData, // Data to plot in the graph (date-wise)
+      progressData, // Data for graph plotting
     });
   } catch (error) {
     console.error("Error:", error);
